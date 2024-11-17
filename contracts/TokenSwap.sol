@@ -26,24 +26,30 @@ contract TokenSwap {
         token2 = _token2;
     }
 
-    function addLiquidity(uint _token1Amount, uint _token2Amount) public returns (uint) {
+    function addLiquidity(uint _token1Amount, uint _token2Amount) public returns (uint liquidityAdded) {
         require(IERC20(token1).transferFrom(msg.sender, address(this), _token1Amount), "Transfer of token1 failed");
         require(IERC20(token2).transferFrom(msg.sender, address(this), _token2Amount), "Transfer of token2 failed");
         
+        uint sumAmounts = _token1Amount + _token2Amount;
         if(totalLiquidity == 0) {
-            totalLiquidity = _token1Amount + _token2Amount;
+            totalLiquidity = sumAmounts;
         } else {
-            totalLiquidity += (_token1Amount + _token2Amount) / 2;
+            totalLiquidity += sumAmounts / 2;
         }
-        liquidity[msg.sender] += (_token1Amount + _token2Amount) / 2;
-        return (_token1Amount + _token2Amount) / 2;
+        liquidityAdded = sumAmounts / 2;
+        liquidity[msg.sender] += liquidityAdded;
+        
+        return liquidityAdded;
     }
 
     function removeLiquidity(uint _amount) public returns (uint token1Amount, uint token2Amount) {
         require(liquidity[msg.sender] >= _amount, "Not enough liquidity to withdraw");
         
-        token1Amount = _amount * IERC20(token1).balanceOf(address(this)) / totalLiquidity;
-        token2Amount = _amount * IERC20(token2).balanceOf(address(this)) / totalLiquidity;
+        uint token1Balance = IERC20(token1).balanceOf(address(this));
+        uint token2Balance = IERC20(token2).balanceOf(address(this));
+
+        token1Amount = _amount * token1Balance / totalLiquidity;
+        token2Amount = _amount * token2Balance / totalLiquidity;
         
         require(IERC20(token1).transfer(msg.sender, token1Amount), "Transfer of token1 failed");
         require(IERC20(token2).transfer(msg.sender, token2Amount), "Transfer of token2 failed");
@@ -57,8 +63,18 @@ contract TokenSwap {
         require(_toToken == token1 || _toToken == token2, "Invalid to token address");
         require(_fromToken != _toToken, "From and to tokens must be different");
         
+        uint toTokenAmount = calculateSwapAmount(_fromToken, _toToken, _amount);
+        
         require(IERC20(_fromToken).transferFrom(msg.sender, address(this), _amount), "Transfer of fromToken failed");
-        require(IERC20(_toToken).transfer(msg.sender, _amount), "Transfer of toToken failed");
+        require(IERC20(_toToken).transfer(msg.sender, toTokenAmount), "Transfer of toToken failed");
+    }
+
+    function calculateSwapAmount(address _fromToken, address _toToken, uint _amount) private view returns (uint toTokenAmount) {
+        uint fromTokenBalance = IERC20(_fromToken).balanceOf(address(this));
+        uint toTokenBalance = IERC20(_toToken).balanceOf(address(this));
+        
+        toTokenAmount = (_amount * toTokenBalance) / fromTokenBalance;
+        return toTokenAmount;
     }
 
     function getBalances() public view returns (uint token1Balance, uint token2Balance) {
